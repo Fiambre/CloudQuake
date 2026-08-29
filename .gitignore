@@ -16,3 +16,6 @@ out/
 
 # Local publish output
 publish/
+
+# Local tooling state
+.claude/

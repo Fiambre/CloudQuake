@@ -57,7 +57,12 @@ public sealed class HotkeyManager : IDisposable
         }
 
         _registered = RegisterHotKey(_source.Handle, HOTKEY_ID, modifiers, vk);
-        Logger.Log($"HotkeyManager: Register mods=Win:{settings.ModWin},Ctrl:{settings.ModCtrl},Alt:{settings.ModAlt},Shift:{settings.ModShift} key={settings.Key} vk=0x{vk:X2} handle={_source.Handle} result={_registered}");
+        if (!_registered)
+        {
+            Logger.Log($"Hotkey registration failed (win32 error {Marshal.GetLastWin32Error()}) for "
+                + $"Win:{settings.ModWin} Ctrl:{settings.ModCtrl} Alt:{settings.ModAlt} Shift:{settings.ModShift} Key:{settings.Key}");
+        }
+
         return _registered;
     }
 
@@ -74,7 +79,6 @@ public sealed class HotkeyManager : IDisposable
     {
         if (msg == WM_HOTKEY && wParam.ToInt32() == HOTKEY_ID)
         {
-            Logger.Log("HotkeyManager: WM_HOTKEY received");
             try
             {
                 HotkeyPressed?.Invoke();

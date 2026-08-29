@@ -1,0 +1,61 @@
+name: Bug report
+description: Something isn't working the way it should
+labels: ["bug"]
+body:
+  - type: textarea
+    id: what-happened
+    attributes:
+      label: What happened
+      description: What you did, what you expected, and what happened instead.
+    validations:
+      required: true
+
+  - type: textarea
+    id: steps
+    attributes:
+      label: Steps to reproduce
+      placeholder: |
+        1. Press the hotkey
+        2. ...
+    validations:
+      required: true
+
+  - type: input
+    id: version
+    attributes:
+      label: CloudQuake version
+      description: From the release you downloaded, or the commit you built.
+      placeholder: v1.0.0
+    validations:
+      required: true
+
+  - type: input
+    id: windows
+    attributes:
+      label: Windows version
+      description: Run `winver` if you're not sure.
+      placeholder: Windows 11 24H2
+    validations:
+      required: true
+
+  - type: dropdown
+    id: monitors
+    attributes:
+      label: Monitor setup
+      description: A lot of positioning bugs only show up on specific setups.
+      options:
+        - Single monitor
+        - Multiple monitors, same scaling
+        - Multiple monitors, different scaling/DPI
+    validations:
+      required: true
+
+  - type: textarea
+    id: log
+    attributes:
+      label: Troubleshooting log
+      description: >
+        Optional but very helpful. Enable "Write a troubleshooting log" in Settings,
+        reproduce the problem, then paste the relevant part of
+        `%APPDATA%\CloudQuake\cloudquake.log`.
+      render: text

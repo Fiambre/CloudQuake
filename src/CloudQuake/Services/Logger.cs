@@ -1,28 +1,54 @@
 using System.IO;
+using CloudQuake.Models;
 
 namespace CloudQuake.Services;
 
-/// <summary>Minimal append-only diagnostic log used while troubleshooting hotkey/toggle behavior.</summary>
+/// <summary>
+/// Opt-in troubleshooting log. Disabled unless the user enables it in Settings, and
+/// capped so an enabled log can never grow without bound.
+/// </summary>
 public static class Logger
 {
-    private static readonly string LogPath = Path.Combine(
-        Environment.GetFolderPath(Environment.SpecialFolder.ApplicationData), "CloudQuake", "diagnostic.log");
+    private const long MaxBytes = 1024 * 1024; // 1 MB, then rolled to .log.old
 
-    private static readonly object Lock = new();
+    private static readonly object Gate = new();
+
+    /// <summary>Set from the loaded settings at startup and whenever settings are saved.</summary>
+    public static bool IsEnabled { get; set; }
 
     public static void Log(string message)
     {
+        if (!IsEnabled)
+        {
+            return;
+        }
+
         try
         {
-            lock (Lock)
+            lock (Gate)
             {
-                Directory.CreateDirectory(Path.GetDirectoryName(LogPath)!);
-                File.AppendAllText(LogPath, $"{DateTime.Now:HH:mm:ss.fff} {message}{Environment.NewLine}");
+                var path = AppSettings.LogPath;
+                Directory.CreateDirectory(Path.GetDirectoryName(path)!);
+                RollIfTooLarge(path);
+                File.AppendAllText(path, $"{DateTime.Now:yyyy-MM-dd HH:mm:ss.fff} {message}{Environment.NewLine}");
             }
         }
         catch
         {
-            // Diagnostics must never crash the app.
+            // Diagnostics must never take the app down.
         }
+    }
+
+    private static void RollIfTooLarge(string path)
+    {
+        var info = new FileInfo(path);
+        if (!info.Exists || info.Length < MaxBytes)
+        {
+            return;
+        }
+
+        var rolled = path + ".old";
+        File.Delete(rolled);
+        File.Move(path, rolled);
     }
 }

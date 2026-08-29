@@ -1,0 +1,7 @@
+blank_issues_enabled: true
+contact_links:
+  - name: CloudCLI itself
+    url: https://github.com/siteboon/claudecodeui/issues
+    about: >
+      CloudQuake only embeds CloudCLI. If the problem is with CloudCLI's own interface,
+      login, or agents, report it upstream instead.

@@ -1,4 +1,4 @@
-﻿<Project Sdk="Microsoft.NET.Sdk">
+<Project Sdk="Microsoft.NET.Sdk">
 
   <PropertyGroup>
     <OutputType>WinExe</OutputType>
@@ -8,12 +8,36 @@
     <UseWPF>true</UseWPF>
     <UseWindowsForms>true</UseWindowsForms>
     <ApplicationManifest>app.manifest</ApplicationManifest>
+    <ApplicationIcon>Assets\cloudquake.ico</ApplicationIcon>
+    <ApplicationHighDpiMode>PerMonitorV2</ApplicationHighDpiMode>
     <AssemblyName>CloudQuake</AssemblyName>
     <RootNamespace>CloudQuake</RootNamespace>
   </PropertyGroup>
 
+  <PropertyGroup>
+    <Product>CloudQuake</Product>
+    <Description>Quake-style dropdown console for CloudCLI on Windows.</Description>
+    <Authors>Rodrigo Guerrero Alvarez</Authors>
+    <Company>Rodrigo Guerrero Alvarez</Company>
+    <Copyright>Copyright (c) 2026 Rodrigo Guerrero Alvarez</Copyright>
+    <RepositoryUrl>https://github.com/Fiambre/CloudQuake</RepositoryUrl>
+    <RepositoryType>git</RepositoryType>
+    <PackageLicenseExpression>MIT</PackageLicenseExpression>
+    <!-- Overridden by CI from the release tag; see .github/workflows/build.yml -->
+    <Version>1.0.0</Version>
+  </PropertyGroup>
+
+  <PropertyGroup>
+    <TreatWarningsAsErrors>false</TreatWarningsAsErrors>
+    <EnforceCodeStyleInBuild>true</EnforceCodeStyleInBuild>
+  </PropertyGroup>
+
   <ItemGroup>
     <PackageReference Include="Microsoft.Web.WebView2" Version="1.0.3296.44" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <Resource Include="Assets\cloudquake.ico" />
   </ItemGroup>
 
 </Project>

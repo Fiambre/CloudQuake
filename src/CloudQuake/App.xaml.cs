@@ -1,7 +1,9 @@
-using System.Drawing;
+using System.IO;
 using System.Windows;
+using System.Windows.Resources;
 using CloudQuake.Models;
 using CloudQuake.Services;
+using Drawing = System.Drawing;
 using Forms = System.Windows.Forms;
 
 namespace CloudQuake;
@@ -12,6 +14,7 @@ public partial class App : System.Windows.Application
 
     private System.Threading.Mutex? _mutex;
     private Forms.NotifyIcon? _trayIcon;
+    private Drawing.Icon? _trayIconImage;
     private HotkeyManager? _hotkeyManager;
     private MainWindow? _mainWindow;
     private AppSettings _settings = new();
@@ -20,55 +23,73 @@ public partial class App : System.Windows.Application
     {
         base.OnStartup(e);
 
-        DispatcherUnhandledException += (_, ex) =>
+        DispatcherUnhandledException += (_, args) =>
         {
-            Logger.Log($"UNHANDLED EXCEPTION: {ex.Exception}");
-            ex.Handled = true;
+            Logger.Log($"Unhandled exception: {args.Exception}");
+            args.Handled = true;
         };
 
         _mutex = new System.Threading.Mutex(initiallyOwned: true, MutexName, out var createdNew);
         if (!createdNew)
         {
             Forms.MessageBox.Show(
-                "CloudQuake ya está corriendo. Buscalo en la bandeja del sistema.",
+                "CloudQuake is already running — look for it in the system tray.",
                 "CloudQuake", Forms.MessageBoxButtons.OK, Forms.MessageBoxIcon.Information);
             Shutdown();
             return;
         }
 
         _settings = AppSettings.Load();
-        Logger.Log($"App.OnStartup: settings loaded. Url={_settings.Url} Win={_settings.ModWin} Ctrl={_settings.ModCtrl} Alt={_settings.ModAlt} Shift={_settings.ModShift} Key={_settings.Key}");
+        Logger.IsEnabled = _settings.EnableDiagnosticLogging;
         AutoStartService.Apply(_settings.StartWithWindows);
+
+        // The tray icon is the app's only always-available surface, so it comes up first:
+        // startup problems below need somewhere to report themselves.
+        SetupTrayIcon();
+
+        if (_settings.NeedsSetup && !RunFirstTimeSetup())
+        {
+            Shutdown();
+            return;
+        }
 
         _mainWindow = new MainWindow(_settings);
 
         _hotkeyManager = new HotkeyManager();
-        _hotkeyManager.HotkeyPressed += () =>
-        {
-            Logger.Log("App: HotkeyPressed event received, dispatching ToggleVisibility");
-            Dispatcher.Invoke(() => _mainWindow?.ToggleVisibility());
-        };
+        _hotkeyManager.HotkeyPressed += () => Dispatcher.Invoke(() => _mainWindow?.ToggleVisibility());
         RegisterHotkeyWithFeedback(_settings);
 
-        SettingsWindow.SettingsSaved += settings =>
+        SettingsWindow.SettingsSaved += async settings =>
         {
             _settings = settings;
             RegisterHotkeyWithFeedback(settings);
+            if (_mainWindow is not null)
+            {
+                await _mainWindow.ApplySettingsAsync();
+            }
         };
+    }
 
-        SetupTrayIcon();
+    /// <summary>Prompts for the CloudCLI URL on first launch. Returns false if the user quits.</summary>
+    private bool RunFirstTimeSetup()
+    {
+        var setup = new SettingsWindow(_settings, isFirstRun: true);
+        if (setup.ShowDialog() != true)
+        {
+            return false;
+        }
+
+        Logger.IsEnabled = _settings.EnableDiagnosticLogging;
+        return true;
     }
 
     private void RegisterHotkeyWithFeedback(AppSettings settings)
     {
-        var ok = _hotkeyManager?.Register(settings) ?? false;
-        if (!ok)
+        if (_hotkeyManager?.Register(settings) == false)
         {
-            _trayIcon?.ShowBalloonTip(
-                4000,
+            NotificationService.ShowWarning(
                 "CloudQuake",
-                "No se pudo registrar la hotkey (puede estar en uso por otra app). Cambiala en Configuración.",
-                Forms.ToolTipIcon.Warning);
+                "That hotkey is already in use by another app. Pick a different one in Settings.");
         }
     }
 
@@ -76,74 +97,91 @@ public partial class App : System.Windows.Application
     {
         var menu = new Forms.ContextMenuStrip();
 
-        var toggleItem = new Forms.ToolStripMenuItem("Mostrar / Ocultar");
+        var toggleItem = new Forms.ToolStripMenuItem("Show / Hide");
         toggleItem.Click += (_, _) => _mainWindow?.ToggleVisibility();
         menu.Items.Add(toggleItem);
 
-        var settingsItem = new Forms.ToolStripMenuItem("Configuración");
-        settingsItem.Click += (_, _) =>
-        {
-            var settingsWindow = new SettingsWindow(_settings);
-            settingsWindow.ShowDialog();
-        };
+        var settingsItem = new Forms.ToolStripMenuItem("Settings");
+        settingsItem.Click += (_, _) => OpenSettings();
         menu.Items.Add(settingsItem);
 
         menu.Items.Add(new Forms.ToolStripSeparator());
 
-        var exitItem = new Forms.ToolStripMenuItem("Salir");
+        var exitItem = new Forms.ToolStripMenuItem("Quit");
         exitItem.Click += (_, _) => ExitApplication();
         menu.Items.Add(exitItem);
 
+        _trayIconImage = LoadAppIcon();
+
         _trayIcon = new Forms.NotifyIcon
         {
-            Icon = BuildTrayIcon(),
+            Icon = _trayIconImage,
             Visible = true,
             Text = "CloudQuake",
             ContextMenuStrip = menu,
         };
         _trayIcon.DoubleClick += (_, _) => _mainWindow?.ToggleVisibility();
+
+        NotificationService.Attach(_trayIcon);
     }
 
-    /// <summary>Draws a small "cloud console" glyph at runtime so the app ships with no external icon asset.</summary>
-    private static Icon BuildTrayIcon()
+    private void OpenSettings()
     {
-        using var bitmap = new Bitmap(32, 32);
-        using (var g = Graphics.FromImage(bitmap))
+        if (_mainWindow is null)
         {
-            g.SmoothingMode = System.Drawing.Drawing2D.SmoothingMode.AntiAlias;
-            g.Clear(Color.Transparent);
-
-            using var bg = new SolidBrush(Color.FromArgb(255, 13, 17, 23));
-            g.FillEllipse(bg, 0, 0, 32, 32);
-
-            using var accentPen = new Pen(Color.FromArgb(255, 88, 166, 255), 2f);
-            g.DrawRectangle(accentPen, 6, 9, 20, 14);
-
-            using var accentBrush = new SolidBrush(Color.FromArgb(255, 88, 166, 255));
-            using var font = new Font("Consolas", 11f, System.Drawing.FontStyle.Bold);
-            g.DrawString(">", font, accentBrush, 9, 10);
+            new SettingsWindow(_settings).ShowDialog();
+            return;
         }
 
-        var hIcon = bitmap.GetHicon();
-        return Icon.FromHandle(hIcon);
+        // Route through the console so it can suspend auto-hide while the dialog is open.
+        _mainWindow.OpenSettings();
+    }
+
+    /// <summary>Loads the packaged application icon, falling back to a stock icon.</summary>
+    private static Drawing.Icon LoadAppIcon()
+    {
+        try
+        {
+            StreamResourceInfo? resource = GetResourceStream(
+                new Uri("pack://application:,,,/Assets/cloudquake.ico"));
+
+            if (resource is not null)
+            {
+                using var stream = resource.Stream;
+                return new Drawing.Icon(stream, new Drawing.Size(32, 32));
+            }
+        }
+        catch (Exception ex)
+        {
+            Logger.Log($"Could not load the packaged icon: {ex.Message}");
+        }
+
+        return Drawing.SystemIcons.Application;
     }
 
     private void ExitApplication()
     {
         _mainWindow?.ForceClose();
-        _mutex?.ReleaseMutex();
         Shutdown();
     }
 
     protected override void OnExit(ExitEventArgs e)
     {
         _hotkeyManager?.Dispose();
+
         if (_trayIcon is not null)
         {
             _trayIcon.Visible = false;
             _trayIcon.Dispose();
             _trayIcon = null;
         }
+
+        _trayIconImage?.Dispose();
+        _trayIconImage = null;
+
+        _mutex?.Dispose();
+        _mutex = null;
+
         base.OnExit(e);
     }
 }

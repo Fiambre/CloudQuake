@@ -8,6 +8,9 @@ on:
     branches: [main]
   workflow_dispatch:
 
+permissions:
+  contents: read
+
 env:
   PROJECT_PATH: src/CloudQuake/CloudQuake.csproj
 
@@ -24,11 +27,27 @@ jobs:
           dotnet-version: "10.0.x"
           dotnet-quality: "ga"
 
+      - name: Resolve version
+        id: version
+        shell: pwsh
+        run: |
+          if ($env:GITHUB_REF -like 'refs/tags/v*') {
+            $version = $env:GITHUB_REF -replace '^refs/tags/v', ''
+          } else {
+            # Untagged builds get a pre-release version stamped with the short SHA.
+            $version = "0.0.0-dev.$($env:GITHUB_SHA.Substring(0,7))"
+          }
+          Write-Output "version=$version" >> $env:GITHUB_OUTPUT
+          Write-Output "Building version $version"
+
       - name: Restore
         run: dotnet restore ${{ env.PROJECT_PATH }}
 
       - name: Build
-        run: dotnet build ${{ env.PROJECT_PATH }} -c Release --no-restore
+        run: >
+          dotnet build ${{ env.PROJECT_PATH }} -c Release --no-restore
+          -p:Version=${{ steps.version.outputs.version }}
+          -warnaserror
 
       - name: Publish (self-contained win-x64)
         run: >
@@ -36,6 +55,7 @@ jobs:
           --self-contained true
           -p:PublishSingleFile=true
           -p:IncludeNativeLibrariesForSelfExtract=true
+          -p:Version=${{ steps.version.outputs.version }}
           -o publish
 
       - name: Upload build artifact
@@ -43,11 +63,14 @@ jobs:
         with:
           name: CloudQuake-win-x64
           path: publish/CloudQuake.exe
+          if-no-files-found: error
 
   release:
     needs: build
     if: startsWith(github.ref, 'refs/tags/v')
     runs-on: windows-latest
+    permissions:
+      contents: write
     steps:
       - name: Download build artifact
         uses: actions/download-artifact@v4
@@ -60,3 +83,4 @@ jobs:
         with:
           files: publish/CloudQuake.exe
           generate_release_notes: true
+          draft: false
